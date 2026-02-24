@@ -27,7 +27,7 @@ function postJson({ host, path, headers, body }) {
   });
 }
 
-async function sendEmailResult(config, toEmail, subject, text) {
+async function sendEmailResult(config, toEmail, subject, text, html = '') {
   const entry = {
     toEmail,
     subject,
@@ -65,7 +65,8 @@ async function sendEmailResult(config, toEmail, subject, text) {
         from: config.email.from,
         to: toEmail,
         subject,
-        text
+        text,
+        ...(html ? { html } : {})
       });
 
       appendOutbox({
@@ -100,7 +101,8 @@ async function sendEmailResult(config, toEmail, subject, text) {
     from: config.email.from,
     to: [toEmail],
     subject,
-    text
+    text,
+    ...(html ? { html } : {})
   });
 
   const response = await postJson({

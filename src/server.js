@@ -135,6 +135,59 @@ function dukeEmailForNetid(netid) {
   return `${netid}@duke.edu`;
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatMatchReason(explanation = []) {
+  const raw = Array.isArray(explanation) ? explanation.join(' ').trim() : String(explanation || '').trim();
+  if (!raw) return 'You share compatible interests and social styles.';
+  return raw.endsWith('.') ? raw : `${raw}.`;
+}
+
+function buildMatchEmail({ recipientNetid, matchedNetid, explanation }) {
+  const matchedEmail = dukeEmailForNetid(matchedNetid);
+  const whyMatched = formatMatchReason(explanation);
+
+  const text = [
+    `Hi ${recipientNetid},`,
+    '',
+    "We're excited to share your LINKDKU match!",
+    '',
+    `You've been matched with ${matchedNetid} (${matchedEmail}).`,
+    '',
+    `Why you were matched: ${whyMatched}`,
+    '',
+    'We encourage you to reach out, introduce yourself, and start the conversation.',
+    '',
+    'Thank you for being part of LINKDKU.',
+    '',
+    'Best regards,',
+    'LINKDKU Team'
+  ].join('\n');
+
+  const html = `<!DOCTYPE html>
+<html>
+<body style="font-family: 'Times New Roman', Times, serif; font-size: 16px; color: #000000; line-height: 1.6;">
+<p>Hi ${escapeHtml(recipientNetid)},</p>
+<p>We're excited to share your LINKDKU match!</p>
+<p>You've been matched with <strong>${escapeHtml(matchedNetid)}</strong> (<a href="mailto:${escapeHtml(matchedEmail)}">${escapeHtml(matchedEmail)}</a>).</p>
+<p><strong>Why you were matched:</strong><br>${escapeHtml(whyMatched)}</p>
+<p>We encourage you to reach out, introduce yourself, and start the conversation.</p>
+<p>Thank you for being part of LINKDKU.</p>
+<br>
+<p>Best regards,<br><strong>LINKDKU Team</strong></p>
+</body>
+</html>`;
+
+  return { text, html };
+}
+
 function normalizeSurveyInput(body, netid) {
   return {
     netid,
@@ -178,31 +231,23 @@ async function executeMatchingAndEmails(triggeredBy = 'schedule') {
     const b = storage.getUserByNetid(match.netidB);
     if (!a || !b) continue;
 
-    const textA = [
-      `Hi ${match.netidA},`,
-      '',
-      `Your LINKDKU match is ${match.netidB} (${dukeEmailForNetid(match.netidB)}).`,
-      `Compatibility score: ${match.score}.`,
-      `Why matched: ${match.explanation.join(' ')}`,
-      '',
-      'Thank you for joining LINKDKU.'
-    ].join('\n');
+    const emailA = buildMatchEmail({
+      recipientNetid: match.netidA,
+      matchedNetid: match.netidB,
+      explanation: match.explanation
+    });
 
-    const textB = [
-      `Hi ${match.netidB},`,
-      '',
-      `Your LINKDKU match is ${match.netidA} (${dukeEmailForNetid(match.netidA)}).`,
-      `Compatibility score: ${match.score}.`,
-      `Why matched: ${match.explanation.join(' ')}`,
-      '',
-      'Thank you for joining LINKDKU.'
-    ].join('\n');
+    const emailB = buildMatchEmail({
+      recipientNetid: match.netidB,
+      matchedNetid: match.netidA,
+      explanation: match.explanation
+    });
 
     const toA = dukeEmailForNetid(match.netidA);
     const toB = dukeEmailForNetid(match.netidB);
 
-    await sendEmailResult(config, toA, 'Your LINKDKU Match Result', textA);
-    await sendEmailResult(config, toB, 'Your LINKDKU Match Result', textB);
+    await sendEmailResult(config, toA, 'Your LINKDKU Match Result', emailA.text, emailA.html);
+    await sendEmailResult(config, toB, 'Your LINKDKU Match Result', emailB.text, emailB.html);
   }
 
   return { ok: true, payload };
