@@ -131,6 +131,10 @@ function upsertUserPreserveEmail(netid, fallbackEmail, extra = {}) {
   return storage.upsertUser({ netid, email, ...extra });
 }
 
+function dukeEmailForNetid(netid) {
+  return `${netid}@duke.edu`;
+}
+
 function normalizeSurveyInput(body, netid) {
   return {
     netid,
@@ -177,7 +181,7 @@ async function executeMatchingAndEmails(triggeredBy = 'schedule') {
     const textA = [
       `Hi ${match.netidA},`,
       '',
-      `Your LINKDKU match is ${match.netidB} (${b.email || `${match.netidB}@duke.edu`}).`,
+      `Your LINKDKU match is ${match.netidB} (${dukeEmailForNetid(match.netidB)}).`,
       `Compatibility score: ${match.score}.`,
       `Why matched: ${match.explanation.join(' ')}`,
       '',
@@ -187,15 +191,15 @@ async function executeMatchingAndEmails(triggeredBy = 'schedule') {
     const textB = [
       `Hi ${match.netidB},`,
       '',
-      `Your LINKDKU match is ${match.netidA} (${a.email || `${match.netidA}@duke.edu`}).`,
+      `Your LINKDKU match is ${match.netidA} (${dukeEmailForNetid(match.netidA)}).`,
       `Compatibility score: ${match.score}.`,
       `Why matched: ${match.explanation.join(' ')}`,
       '',
       'Thank you for joining LINKDKU.'
     ].join('\n');
 
-    const toA = config.email.testTo || a.email || `${match.netidA}@duke.edu`;
-    const toB = config.email.testTo || b.email || `${match.netidB}@duke.edu`;
+    const toA = dukeEmailForNetid(match.netidA);
+    const toB = dukeEmailForNetid(match.netidB);
 
     await sendEmailResult(config, toA, 'Your LINKDKU Match Result', textA);
     await sendEmailResult(config, toB, 'Your LINKDKU Match Result', textB);

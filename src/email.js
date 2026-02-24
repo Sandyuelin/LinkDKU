@@ -71,7 +71,13 @@ async function sendEmailResult(config, toEmail, subject, text) {
       appendOutbox({
         ...entry,
         mode: 'sent',
-        response: JSON.stringify({ messageId: info.messageId })
+        response: JSON.stringify({
+          messageId: info.messageId,
+          accepted: info.accepted,
+          rejected: info.rejected,
+          pending: info.pending,
+          response: info.response
+        })
       });
       return { ok: true, statusCode: 202 };
     } catch (err) {
