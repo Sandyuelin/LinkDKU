@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const config = require('./config');
 
 const dataDir = path.join(process.cwd(), 'data');
 const usersPath = path.join(dataDir, 'users.json');
@@ -29,95 +30,232 @@ function writeJson(filePath, value) {
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
 }
 
-function upsertUser(user) {
-  const users = readJson(usersPath, []);
-  const idx = users.findIndex((u) => u.netid === user.netid);
-  const merged = {
-    ...users[idx],
-    ...user,
-    updatedAt: new Date().toISOString()
-  };
+const jsonBackend = {
+  upsertUser(user) {
+    const users = readJson(usersPath, []);
+    const idx = users.findIndex((u) => u.netid === user.netid);
+    const now = new Date().toISOString();
+    const merged = { ...users[idx], ...user, updatedAt: now };
+    if (idx >= 0) users[idx] = merged;
+    else users.push({ ...merged, createdAt: now });
+    writeJson(usersPath, users);
+    return merged;
+  },
 
-  if (idx >= 0) users[idx] = merged;
-  else users.push({ ...merged, createdAt: new Date().toISOString() });
+  getUserByNetid(netid) {
+    const users = readJson(usersPath, []);
+    return users.find((u) => u.netid === netid) || null;
+  },
 
-  writeJson(usersPath, users);
-  return merged;
+  saveSurvey(response) {
+    const rows = readJson(surveyPath, []);
+    const idx = rows.findIndex((r) => r.netid === response.netid);
+    const now = new Date().toISOString();
+    const record = { ...rows[idx], ...response, updatedAt: now };
+    if (idx >= 0) rows[idx] = record;
+    else rows.push({ ...record, createdAt: now });
+    writeJson(surveyPath, rows);
+    return record;
+  },
+
+  getAllSurvey() {
+    return readJson(surveyPath, []);
+  },
+
+  getAllUsers() {
+    return readJson(usersPath, []);
+  },
+
+  saveMatches(payload) {
+    const allMatches = readJson(matchPath, []);
+    allMatches.push(payload);
+    writeJson(matchPath, allMatches);
+    return payload;
+  },
+
+  getAllMatches() {
+    return readJson(matchPath, []);
+  },
+
+  getLatestMatches() {
+    const allMatches = readJson(matchPath, []);
+    return allMatches[allMatches.length - 1] || null;
+  },
+
+  getState() {
+    return readJson(statePath, {});
+  },
+
+  setState(nextState) {
+    writeJson(statePath, nextState);
+    return nextState;
+  },
+
+  appendOutbox(entry) {
+    const outbox = readJson(outboxPath, []);
+    outbox.push(entry);
+    writeJson(outboxPath, outbox);
+  },
+
+  getEmailOutbox() {
+    return readJson(outboxPath, []);
+  }
+};
+
+let pgPool = null;
+let pgInitPromise = null;
+
+function getPgPool() {
+  if (pgPool) return pgPool;
+  if (!config.database.postgresUrl) {
+    throw new Error('DB_PROVIDER=postgres but DATABASE_URL/POSTGRES_URL is not configured.');
+  }
+  const { Pool } = require('pg');
+  pgPool = new Pool({
+    connectionString: config.database.postgresUrl,
+    ssl: config.database.postgresSsl ? { rejectUnauthorized: false } : false
+  });
+  return pgPool;
 }
 
-function getUserByNetid(netid) {
-  const users = readJson(usersPath, []);
-  return users.find((u) => u.netid === netid) || null;
+async function ensurePgSchema() {
+  if (pgInitPromise) return pgInitPromise;
+  pgInitPromise = (async () => {
+    const pool = getPgPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        netid TEXT PRIMARY KEY,
+        payload JSONB NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS survey_responses (
+        netid TEXT PRIMARY KEY,
+        payload JSONB NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS match_runs (
+        id BIGSERIAL PRIMARY KEY,
+        payload JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS app_state (
+        state_key TEXT PRIMARY KEY,
+        payload JSONB NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS email_outbox (
+        id BIGSERIAL PRIMARY KEY,
+        payload JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+  })().catch((err) => {
+    pgInitPromise = null;
+    throw err;
+  });
+  return pgInitPromise;
 }
 
-function saveSurvey(response) {
-  const rows = readJson(surveyPath, []);
-  const idx = rows.findIndex((r) => r.netid === response.netid);
-  const record = {
-    ...response,
-    updatedAt: new Date().toISOString()
-  };
-
-  if (idx >= 0) rows[idx] = record;
-  else rows.push({ ...record, createdAt: new Date().toISOString() });
-
-  writeJson(surveyPath, rows);
-  return record;
+async function pgSelectOne(table, keyField, keyValue) {
+  await ensurePgSchema();
+  const pool = getPgPool();
+  const { rows } = await pool.query(`SELECT payload FROM ${table} WHERE ${keyField} = $1`, [keyValue]);
+  return rows[0]?.payload || null;
 }
 
-function getAllSurvey() {
-  return readJson(surveyPath, []);
-}
-
-function getAllUsers() {
-  return readJson(usersPath, []);
-}
-
-function saveMatches(payload) {
-  const allMatches = readJson(matchPath, []);
-  allMatches.push(payload);
-  writeJson(matchPath, allMatches);
+async function pgUpsertPayload(table, keyField, keyValue, payload) {
+  await ensurePgSchema();
+  const pool = getPgPool();
+  await pool.query(
+    `INSERT INTO ${table} (${keyField}, payload)
+     VALUES ($1, $2::jsonb)
+     ON CONFLICT (${keyField}) DO UPDATE SET payload = EXCLUDED.payload`,
+    [keyValue, JSON.stringify(payload)]
+  );
   return payload;
 }
 
-function getAllMatches() {
-  return readJson(matchPath, []);
-}
+const pgBackend = {
+  async upsertUser(user) {
+    const existing = await pgSelectOne('users', 'netid', user.netid);
+    const now = new Date().toISOString();
+    const merged = existing ? { ...existing, ...user, updatedAt: now } : { ...user, createdAt: now, updatedAt: now };
+    return pgUpsertPayload('users', 'netid', user.netid, merged);
+  },
 
-function getLatestMatches() {
-  const allMatches = readJson(matchPath, []);
-  return allMatches[allMatches.length - 1] || null;
-}
+  getUserByNetid(netid) {
+    return pgSelectOne('users', 'netid', netid);
+  },
 
-function getState() {
-  return readJson(statePath, {});
-}
+  async saveSurvey(response) {
+    const existing = await pgSelectOne('survey_responses', 'netid', response.netid);
+    const now = new Date().toISOString();
+    const record = existing
+      ? { ...existing, ...response, updatedAt: now }
+      : { ...response, createdAt: now, updatedAt: now };
+    return pgUpsertPayload('survey_responses', 'netid', response.netid, record);
+  },
 
-function setState(nextState) {
-  writeJson(statePath, nextState);
-}
+  async getAllSurvey() {
+    await ensurePgSchema();
+    const { rows } = await getPgPool().query('SELECT payload FROM survey_responses ORDER BY netid ASC');
+    return rows.map((r) => r.payload);
+  },
 
-function appendOutbox(entry) {
-  const outbox = readJson(outboxPath, []);
-  outbox.push(entry);
-  writeJson(outboxPath, outbox);
-}
+  async getAllUsers() {
+    await ensurePgSchema();
+    const { rows } = await getPgPool().query('SELECT payload FROM users ORDER BY netid ASC');
+    return rows.map((r) => r.payload);
+  },
 
-function getEmailOutbox() {
-  return readJson(outboxPath, []);
-}
+  async saveMatches(payload) {
+    await ensurePgSchema();
+    await getPgPool().query('INSERT INTO match_runs (payload) VALUES ($1::jsonb)', [JSON.stringify(payload)]);
+    return payload;
+  },
+
+  async getAllMatches() {
+    await ensurePgSchema();
+    const { rows } = await getPgPool().query('SELECT payload FROM match_runs ORDER BY id ASC');
+    return rows.map((r) => r.payload);
+  },
+
+  async getLatestMatches() {
+    await ensurePgSchema();
+    const { rows } = await getPgPool().query('SELECT payload FROM match_runs ORDER BY id DESC LIMIT 1');
+    return rows[0]?.payload || null;
+  },
+
+  async getState() {
+    return (await pgSelectOne('app_state', 'state_key', 'global')) || {};
+  },
+
+  setState(nextState) {
+    return pgUpsertPayload('app_state', 'state_key', 'global', nextState);
+  },
+
+  async appendOutbox(entry) {
+    await ensurePgSchema();
+    await getPgPool().query('INSERT INTO email_outbox (payload) VALUES ($1::jsonb)', [JSON.stringify(entry)]);
+  },
+
+  async getEmailOutbox() {
+    await ensurePgSchema();
+    const { rows } = await getPgPool().query('SELECT payload FROM email_outbox ORDER BY id ASC');
+    return rows.map((r) => r.payload);
+  }
+};
+
+const backend = config.database.provider === 'postgres' ? pgBackend : jsonBackend;
 
 module.exports = {
-  upsertUser,
-  getUserByNetid,
-  saveSurvey,
-  getAllSurvey,
-  getAllUsers,
-  saveMatches,
-  getAllMatches,
-  getLatestMatches,
-  getState,
-  setState,
-  appendOutbox,
-  getEmailOutbox
+  upsertUser: (...args) => backend.upsertUser(...args),
+  getUserByNetid: (...args) => backend.getUserByNetid(...args),
+  saveSurvey: (...args) => backend.saveSurvey(...args),
+  getAllSurvey: (...args) => backend.getAllSurvey(...args),
+  getAllUsers: (...args) => backend.getAllUsers(...args),
+  saveMatches: (...args) => backend.saveMatches(...args),
+  getAllMatches: (...args) => backend.getAllMatches(...args),
+  getLatestMatches: (...args) => backend.getLatestMatches(...args),
+  getState: (...args) => backend.getState(...args),
+  setState: (...args) => backend.setState(...args),
+  appendOutbox: (...args) => backend.appendOutbox(...args),
+  getEmailOutbox: (...args) => backend.getEmailOutbox(...args)
 };

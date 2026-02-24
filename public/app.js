@@ -92,8 +92,6 @@ function initBubbleScales() {
 
 async function initHome() {
   const dukeOauthBtn = document.getElementById('dukeOauthBtn');
-  const devLoginBtn = document.getElementById('devLoginBtn');
-  const netidInput = document.getElementById('netidInput');
   const homeAdminLoginBtn = document.getElementById('homeAdminLoginBtn');
   const showAdminPanelBtn = document.getElementById('showAdminPanelBtn');
   const homeAdminPanel = document.getElementById('homeAdminPanel');
@@ -106,24 +104,6 @@ async function initHome() {
 
   dukeOauthBtn.addEventListener('click', () => {
     window.location.href = '/auth/duke';
-  });
-
-  devLoginBtn?.addEventListener('click', async () => {
-    setStatus(loginStatus, 'Signing in...');
-    try {
-      const netid = (netidInput?.value || '').trim().toLowerCase();
-      if (!netid) {
-        setStatus(loginStatus, 'Please enter a netid.', 'error');
-        return;
-      }
-      await api('/auth/dev-login', {
-        method: 'POST',
-        body: JSON.stringify({ netid })
-      });
-      window.location.href = '/dashboard.html';
-    } catch (err) {
-      setStatus(loginStatus, err.message, 'error');
-    }
   });
 
   showAdminPanelBtn?.addEventListener('click', () => {

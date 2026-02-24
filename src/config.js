@@ -51,7 +51,9 @@ module.exports = {
   },
   database: {
     provider: process.env.DB_PROVIDER || 'json',
-    sqlitePath: process.env.DB_SQLITE_PATH || './data/linkdku.sqlite'
+    sqlitePath: process.env.DB_SQLITE_PATH || './data/linkdku.sqlite',
+    postgresUrl: process.env.DATABASE_URL || process.env.POSTGRES_URL || '',
+    postgresSsl: (process.env.POSTGRES_SSL || 'true') === 'true'
   },
   adminAuth: {
     username: process.env.ADMIN_USERNAME || 'yh405',

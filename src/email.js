@@ -37,7 +37,7 @@ async function sendEmailResult(config, toEmail, subject, text, html = '') {
 
   if (config.email.provider === 'smtp') {
     if (!config.email.smtpHost || !config.email.smtpUser || !config.email.smtpPass) {
-      appendOutbox({ ...entry, mode: 'dry-run', response: 'SMTP not configured.' });
+      await appendOutbox({ ...entry, mode: 'dry-run', response: 'SMTP not configured.' });
       return { ok: true, dryRun: true };
     }
 
@@ -46,7 +46,7 @@ async function sendEmailResult(config, toEmail, subject, text, html = '') {
       // Optional dependency; install when using SMTP mode.
       nodemailer = require('nodemailer');
     } catch {
-      appendOutbox({ ...entry, mode: 'failed', response: 'Missing dependency: nodemailer' });
+      await appendOutbox({ ...entry, mode: 'failed', response: 'Missing dependency: nodemailer' });
       return { ok: false, statusCode: 500 };
     }
 
@@ -69,7 +69,7 @@ async function sendEmailResult(config, toEmail, subject, text, html = '') {
         ...(html ? { html } : {})
       });
 
-      appendOutbox({
+      await appendOutbox({
         ...entry,
         mode: 'sent',
         response: JSON.stringify({
@@ -82,7 +82,7 @@ async function sendEmailResult(config, toEmail, subject, text, html = '') {
       });
       return { ok: true, statusCode: 202 };
     } catch (err) {
-      appendOutbox({
+      await appendOutbox({
         ...entry,
         mode: 'failed',
         statusCode: 500,
@@ -93,7 +93,7 @@ async function sendEmailResult(config, toEmail, subject, text, html = '') {
   }
 
   if (!config.email.apiKey) {
-    appendOutbox({ ...entry, mode: 'dry-run' });
+    await appendOutbox({ ...entry, mode: 'dry-run' });
     return { ok: true, dryRun: true };
   }
 
@@ -117,7 +117,7 @@ async function sendEmailResult(config, toEmail, subject, text, html = '') {
   });
 
   const ok = response.statusCode >= 200 && response.statusCode < 300;
-  appendOutbox({
+  await appendOutbox({
     ...entry,
     mode: ok ? 'sent' : 'failed',
     statusCode: response.statusCode,

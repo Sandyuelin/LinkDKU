@@ -56,15 +56,16 @@ function makeUser(i) {
 
 const fakeUsers = Array.from({ length: 20 }, (_, i) => makeUser(i));
 
-for (const u of fakeUsers) {
-  storage.upsertUser({
-    netid: u.netid,
-    email: `${u.netid}@duke.edu`
-  });
-
-  storage.saveSurvey({
-    ...u
-  });
-}
-
-console.log(`Seeded ${fakeUsers.length} fake accounts with survey data.`);
+(async () => {
+  for (const u of fakeUsers) {
+    await storage.upsertUser({
+      netid: u.netid,
+      email: `${u.netid}@duke.edu`
+    });
+    await storage.saveSurvey({ ...u });
+  }
+  console.log(`Seeded ${fakeUsers.length} fake accounts with survey data.`);
+})().catch((err) => {
+  console.error('Seed failed:', err.message);
+  process.exit(1);
+});

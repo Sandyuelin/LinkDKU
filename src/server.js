@@ -125,8 +125,8 @@ function requireAdmin(session, res) {
   return true;
 }
 
-function upsertUserPreserveEmail(netid, fallbackEmail, extra = {}) {
-  const existing = storage.getUserByNetid(netid);
+async function upsertUserPreserveEmail(netid, fallbackEmail, extra = {}) {
+  const existing = await storage.getUserByNetid(netid);
   const email = existing?.email || fallbackEmail;
   return storage.upsertUser({ netid, email, ...extra });
 }
@@ -211,7 +211,7 @@ function normalizeSurveyInput(body, netid) {
 }
 
 async function executeMatchingAndEmails(triggeredBy = 'schedule') {
-  const surveyRows = storage.getAllSurvey();
+  const surveyRows = await storage.getAllSurvey();
   if (surveyRows.length < 2) {
     return { ok: false, message: 'Need at least 2 responses to match.' };
   }
@@ -224,11 +224,11 @@ async function executeMatchingAndEmails(triggeredBy = 'schedule') {
     matches
   };
 
-  storage.saveMatches(payload);
+  await storage.saveMatches(payload);
 
   for (const match of matches) {
-    const a = storage.getUserByNetid(match.netidA);
-    const b = storage.getUserByNetid(match.netidB);
+    const a = await storage.getUserByNetid(match.netidA);
+    const b = await storage.getUserByNetid(match.netidB);
     if (!a || !b) continue;
 
     const emailA = buildMatchEmail({
@@ -253,23 +253,23 @@ async function executeMatchingAndEmails(triggeredBy = 'schedule') {
   return { ok: true, payload };
 }
 
-function shouldRunScheduledJob() {
+async function shouldRunScheduledJob() {
   const now = new Date();
   if (now.getUTCMinutes() !== config.schedule.minute || now.getUTCHours() !== config.schedule.hour) {
     return false;
   }
 
-  const state = storage.getState();
+  const state = await storage.getState();
   const today = now.toISOString().slice(0, 10);
   if (state.lastRunDate === today) return false;
 
-  storage.setState({ ...state, lastRunDate: today, lastRunAt: now.toISOString() });
+  await storage.setState({ ...state, lastRunDate: today, lastRunAt: now.toISOString() });
   return true;
 }
 
 function startScheduler() {
   setInterval(async () => {
-    if (!shouldRunScheduledJob()) return;
+    if (!(await shouldRunScheduledJob())) return;
     try {
       await executeMatchingAndEmails('schedule');
     } catch (err) {
@@ -296,7 +296,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const user = upsertUserPreserveEmail(netid, `${netid}@duke.edu`);
+    const user = await upsertUserPreserveEmail(netid, `${netid}@duke.edu`);
     session.user = user;
     sendJson(res, 200, { ok: true, user });
     return;
@@ -311,7 +311,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const user = upsertUserPreserveEmail(netid, `${netid}@duke.edu`, { authProvider: 'duke-fallback' });
+    const user = await upsertUserPreserveEmail(netid, `${netid}@duke.edu`, { authProvider: 'duke-fallback' });
     session.user = user;
     sendJson(res, 200, { ok: true, user });
     return;
@@ -373,7 +373,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const normalizedNetid = profile.netid.toLowerCase();
-      const user = upsertUserPreserveEmail(normalizedNetid, profile.email || `${normalizedNetid}@duke.edu`);
+      const user = await upsertUserPreserveEmail(normalizedNetid, profile.email || `${normalizedNetid}@duke.edu`);
       session.user = user;
       redirect(res, '/dashboard.html');
     } catch (err) {
@@ -414,7 +414,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    storage.saveSurvey(survey);
+    await storage.saveSurvey(survey);
     sendJson(res, 200, { ok: true });
     return;
   }
@@ -467,11 +467,11 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && url.pathname === '/api/admin/dashboard') {
     if (!requireAdmin(session, res)) return;
-    const surveys = storage.getAllSurvey();
-    const users = storage.getAllUsers();
-    const matches = storage.getAllMatches();
+    const surveys = await storage.getAllSurvey();
+    const users = await storage.getAllUsers();
+    const matches = await storage.getAllMatches();
     const latest = matches[matches.length - 1] || null;
-    const outbox = storage.getEmailOutbox();
+    const outbox = await storage.getEmailOutbox();
 
     sendJson(res, 200, {
       summary: {
@@ -492,7 +492,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && url.pathname === '/api/admin/latest-matches') {
     if (!requireAdmin(session, res)) return;
-    sendJson(res, 200, { latest: storage.getLatestMatches() });
+    sendJson(res, 200, { latest: await storage.getLatestMatches() });
     return;
   }
 
