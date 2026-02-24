@@ -28,6 +28,9 @@
       <section class="card">
         <h2>Latest Match Run</h2>
         <div id="latestRunMeta"></div>
+        <div id="readReportWrap" class="read-report-wrap" style="display: none;">
+          <button type="button" id="readReportBtn" class="btn btn-secondary">Read Report</button>
+        </div>
         <div class="table-wrap" style="margin-top: 10px;">
           <table>
             <thead>
@@ -78,6 +81,17 @@
         </div>
       </section>
     </main>
+
+    <div id="reportModal" class="report-modal" aria-hidden="true">
+      <div class="report-modal-backdrop"></div>
+      <div class="report-modal-box">
+        <div class="report-modal-header">
+          <h3>Evaluation Report</h3>
+          <button type="button" id="closeReportBtn" class="report-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="report-modal-body"><iframe id="reportFrame" title="Evaluation Report"></iframe></div>
+      </div>
+    </div>
 
     <script src="/app.js"></script>
   </body>

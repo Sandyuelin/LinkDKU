@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { execSync } = require('child_process');
 
 const config = require('./config');
 const storage = require('./storage');
@@ -375,7 +376,43 @@ const server = http.createServer(async (req, res) => {
     if (!result.ok && !result.error) {
       result.error = result.message || 'Matching failed.';
     }
+    if (result.ok) {
+      try {
+        const evalPath = path.join(process.cwd(), 'evaluation', 'evaluate.js');
+        if (fs.existsSync(evalPath)) {
+          execSync(`node "${evalPath}"`, { cwd: process.cwd(), stdio: 'pipe' });
+        }
+      } catch (_) {
+        // ignore evaluation failure; report may still exist from previous run
+      }
+    }
     sendJson(res, result.ok ? 200 : 400, result);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/admin/report') {
+    if (!requireAdmin(session, res)) return;
+    const reportPath = path.join(process.cwd(), 'evaluation', 'output', 'report.txt');
+    if (!fs.existsSync(reportPath)) {
+      sendJson(res, 404, { error: 'Report not found. Run matching first to generate it.' });
+      return;
+    }
+    const report = fs.readFileSync(reportPath, 'utf8');
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end(report);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/admin/report-html') {
+    if (!requireAdmin(session, res)) return;
+    const reportPath = path.join(process.cwd(), 'evaluation', 'output', 'report.html');
+    if (!fs.existsSync(reportPath)) {
+      sendJson(res, 404, { error: 'Chart report not found. Run matching first to generate it.' });
+      return;
+    }
+    const html = fs.readFileSync(reportPath, 'utf8');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
     return;
   }
 

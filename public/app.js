@@ -450,15 +450,18 @@ function renderSummary(summary) {
 function renderMatches(latest) {
   const meta = document.getElementById('latestRunMeta');
   const body = document.getElementById('matchesBody');
+  const reportWrap = document.getElementById('readReportWrap');
   if (!meta || !body) return;
 
   if (!latest) {
     meta.innerHTML = '<small>No matching run has been completed yet.</small>';
+    if (reportWrap) reportWrap.style.display = 'none';
     body.innerHTML = '<tr><td colspan="4">No data</td></tr>';
     return;
   }
 
   meta.innerHTML = `<small>Generated: <code>${latest.generatedAt}</code> | Source: <code>${latest.triggeredBy}</code> | Matches: <code>${latest.count}</code></small>`;
+  if (reportWrap) reportWrap.style.display = 'block';
   body.innerHTML = '';
   (latest.matches || []).forEach((m) => {
     const row = document.createElement('tr');
@@ -542,6 +545,27 @@ async function initAdminDashboard() {
       setStatus(statusEl, err.message, 'error');
     }
   });
+
+  const readReportBtn = document.getElementById('readReportBtn');
+  const reportModal = document.getElementById('reportModal');
+  const reportFrame = document.getElementById('reportFrame');
+  const closeReportBtn = document.getElementById('closeReportBtn');
+
+  if (readReportBtn && reportModal && reportFrame) {
+    readReportBtn.addEventListener('click', () => {
+      reportFrame.src = '/api/admin/report-html';
+      reportModal.setAttribute('aria-hidden', 'false');
+    });
+    function closeReportModal() {
+      reportModal.setAttribute('aria-hidden', 'true');
+      reportFrame.src = 'about:blank';
+    }
+    if (closeReportBtn) closeReportBtn.addEventListener('click', closeReportModal);
+    if (reportModal) {
+      const backdrop = reportModal.querySelector('.report-modal-backdrop');
+      if (backdrop) backdrop.addEventListener('click', closeReportModal);
+    }
+  }
 
   refreshBtn.addEventListener('click', loadDashboard);
   logoutBtn.addEventListener('click', async () => {

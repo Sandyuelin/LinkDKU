@@ -12,6 +12,7 @@
     "dev": "node --watch src/server.js",
     "run:matching": "node src/server.js --run-matching",
     "seed:fake": "node scripts/seed-fake-accounts.js",
-    "db:reset": "node scripts/reset-database.js"
+    "db:reset": "node scripts/reset-database.js",
+    "evaluate": "node evaluation/evaluate.js"
   }
 }
