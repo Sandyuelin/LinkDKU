@@ -27,7 +27,7 @@ function postJson({ host, path, headers, body }) {
   });
 }
 
-async function sendEmailResult(config, toEmail, subject, text) {
+async function sendEmailResult(config, toEmail, subject, text, html = '') {
   const entry = {
     toEmail,
     subject,
@@ -65,13 +65,20 @@ async function sendEmailResult(config, toEmail, subject, text) {
         from: config.email.from,
         to: toEmail,
         subject,
-        text
+        text,
+        ...(html ? { html } : {})
       });
 
       appendOutbox({
         ...entry,
         mode: 'sent',
-        response: JSON.stringify({ messageId: info.messageId })
+        response: JSON.stringify({
+          messageId: info.messageId,
+          accepted: info.accepted,
+          rejected: info.rejected,
+          pending: info.pending,
+          response: info.response
+        })
       });
       return { ok: true, statusCode: 202 };
     } catch (err) {
@@ -94,7 +101,8 @@ async function sendEmailResult(config, toEmail, subject, text) {
     from: config.email.from,
     to: [toEmail],
     subject,
-    text
+    text,
+    ...(html ? { html } : {})
   });
 
   const response = await postJson({
